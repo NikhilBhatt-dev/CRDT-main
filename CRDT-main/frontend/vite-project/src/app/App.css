@@ -1,5 +1,127 @@
 @import "tailwindcss";
 
+.collaboration-status-card {
+  margin-bottom: 1rem;
+  border: 1px solid #26364f;
+  border-radius: 0.75rem;
+  background: linear-gradient(145deg, #111c31, #0b1425);
+  color: #e5edf8;
+  padding: 0.875rem;
+  box-shadow: 0 8px 20px rgb(15 23 42 / 12%);
+  transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.collaboration-status-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-height: 1.75rem;
+}
+
+.collaboration-status-icon {
+  display: inline-flex;
+  flex: 0 0 1.125rem;
+  align-items: center;
+  justify-content: center;
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.collaboration-status-icon svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.connection-spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid #334155;
+  border-top-color: #60a5fa;
+  border-radius: 50%;
+  animation: collaboration-spin 750ms linear infinite;
+}
+
+.connected-dot {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background: #4ade80;
+  box-shadow: 0 0 0 4px rgb(74 222 128 / 12%);
+}
+
+.collaboration-status-label {
+  flex: 1;
+  font-size: 0.875rem;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.status-connected {
+  border-color: rgb(74 222 128 / 28%);
+}
+
+.status-connected .collaboration-status-label {
+  color: #bbf7d0;
+}
+
+.status-connecting .collaboration-status-label,
+.status-reconnecting .collaboration-status-label {
+  color: #dbeafe;
+}
+
+.status-disconnected {
+  border-color: rgb(251 191 36 / 30%);
+  background: linear-gradient(145deg, #1d2430, #121a28);
+}
+
+.status-disconnected .collaboration-status-icon {
+  color: #fbbf24;
+}
+
+.status-disconnected .collaboration-status-label {
+  color: #fde68a;
+}
+
+.collaboration-status-detail {
+  margin: 0.5rem 0 0 1.75rem;
+  color: #9aaac0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.connection-retry-button {
+  border: 1px solid #475569;
+  border-radius: 0.5rem;
+  background: #1e293b;
+  color: #f8fafc;
+  padding: 0.35rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.connection-retry-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #94a3b8;
+  background: #334155;
+}
+
+.connection-retry-button:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.connection-retry-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+@keyframes collaboration-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .compiler-section {
   display: flex;
   flex-direction: column;
@@ -164,5 +286,16 @@
     grid-template-columns: 1fr;
     max-height: 45%;
     overflow: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .connection-spinner {
+    animation-duration: 1.5s;
+  }
+
+  .collaboration-status-card,
+  .connection-retry-button {
+    transition: none;
   }
 }

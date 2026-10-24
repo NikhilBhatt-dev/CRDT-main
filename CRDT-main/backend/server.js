@@ -27,12 +27,11 @@ const indexHtmlPath = fs.existsSync(path.join(publicPath, "index.html"))
 const PORT = process.env.PORT || 3000
 const ONLINECOMPILER_API_URL =
     process.env.ONLINECOMPILER_API_URL || "https://api.onlinecompiler.io/api/run-code-sync/"
-const frontendOrigins = new Set(
-    (process.env.FRONTEND_ORIGIN || "https://crdt-main.vercel.app")
-        .split(",")
-        .map((origin) => origin.trim())
-        .filter(Boolean)
-)
+const frontendOrigins = new Set([
+    "https://crdt-main.vercel.app",
+    "https://crdt-8814.vercel.app",
+    ...(process.env.FRONTEND_ORIGIN || "").split(",").map((origin) => origin.trim()).filter(Boolean),
+])
 const MAX_SOURCE_BYTES = 100_000
 const MAX_STDIN_BYTES = 100_000
 const EXECUTION_TIMEOUT_MS = 35_000
