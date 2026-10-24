@@ -1,5 +1,58 @@
 @import "tailwindcss";
 
+.editor-sidebar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.editor-home-link {
+  margin-bottom: 1rem;
+  border: 0;
+  background: transparent;
+  color: #172554;
+  font-size: 0.95rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.room-share-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.85rem;
+  border: 1px solid #d5deeb;
+  border-radius: 0.65rem;
+  background: #f1f5f9;
+  padding: 0.65rem;
+  color: #334155;
+  font-size: 0.72rem;
+}
+
+.room-share-card button {
+  border: 1px solid #bcc9dd;
+  border-radius: 0.45rem;
+  background: white;
+  padding: 0.38rem 0.55rem;
+  color: #1d4ed8;
+  font-size: 0.7rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.room-share-card button:hover {
+  background: #eff6ff;
+}
+
+.room-share-card small {
+  flex-basis: 100%;
+  color: #b45309;
+  line-height: 1.4;
+}
+
 .collaboration-status-card {
   margin-bottom: 1rem;
   border: 1px solid #26364f;

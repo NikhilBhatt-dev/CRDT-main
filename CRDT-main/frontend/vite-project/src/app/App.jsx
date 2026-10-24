@@ -4,6 +4,7 @@ import { MonacoBinding } from "y-monaco"
 import { useRef, useMemo, useState, useEffect } from 'react'
 import * as Y from 'yjs'
 import { SocketIOProvider } from "y-socket.io"
+import HomePage from './HomePage'
 
 const languages = [
   { key: 'java', label: 'Java', monacoLanguage: 'java' },
@@ -12,10 +13,9 @@ const languages = [
   { key: 'javascript', label: 'JavaScript (Node.js)', monacoLanguage: 'javascript' },
 ]
 const BACKEND_URL = (
-  import.meta.env.VITE_BACKEND_URL ||
   (import.meta.env.DEV
-    ? `${window.location.protocol}//${window.location.hostname}:3000`
-    : 'https://crdt-main.onrender.com')
+    ? import.meta.env.VITE_BACKEND_URL_DEV || `${window.location.protocol}//${window.location.hostname}:3000`
+    : import.meta.env.VITE_BACKEND_URL || 'https://crdt-main.onrender.com')
 ).replace(/\/+$/, '')
 
 function getParticipantId() {
@@ -36,7 +36,59 @@ function getParticipantId() {
   return participantId
 }
 
+const ROOM_PATH_PATTERN = /^\/room\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i
+
+function getRoomIdFromPath(pathname) {
+  return pathname.match(ROOM_PATH_PATTERN)?.[1] || ''
+}
+
 function App() {
+  const [roomId, setRoomId] = useState(() => getRoomIdFromPath(window.location.pathname))
+  const [invalidRoomPath, setInvalidRoomPath] = useState(() => (
+    window.location.pathname !== '/' && !getRoomIdFromPath(window.location.pathname)
+  ))
+
+  useEffect(() => {
+    const updateRoute = () => {
+      const nextRoomId = getRoomIdFromPath(window.location.pathname)
+      setRoomId(nextRoomId)
+      setInvalidRoomPath(window.location.pathname !== '/' && !nextRoomId)
+    }
+    window.addEventListener('popstate', updateRoute)
+    return () => window.removeEventListener('popstate', updateRoute)
+  }, [])
+
+  const startRoom = () => {
+    const newRoomId = window.crypto.randomUUID()
+    window.history.pushState({}, '', `/room/${newRoomId}`)
+    setInvalidRoomPath(false)
+    setRoomId(newRoomId)
+  }
+
+  const goHome = () => {
+    window.history.pushState({}, '', '/')
+    setRoomId('')
+    setInvalidRoomPath(false)
+  }
+
+  if (invalidRoomPath) {
+    return (
+      <main className="invalid-room-page">
+        <section>
+          <p className="home-eyebrow">ROOM NOT FOUND</p>
+          <h1>This room link is invalid.</h1>
+          <p>Room links use a valid UUID. Start a new room to invite your team.</p>
+          <button className="home-primary-button" type="button" onClick={goHome}>Back to home</button>
+        </section>
+      </main>
+    )
+  }
+
+  if (!roomId) return <HomePage onStart={startRoom} />
+  return <EditorRoom key={roomId} roomId={roomId} onHome={goHome} />
+}
+
+function EditorRoom({ roomId, onHome }) {
 
   const editorRef = useRef(null)
   const providerRef = useRef(null)
@@ -45,9 +97,11 @@ function App() {
   const hasConnectedRef = useRef(false)
   const participantId = useMemo(getParticipantId, [])
   const [editorReady, setEditorReady] = useState(false)
-  const [username, setUsername] = useState('')
+  const [username] = useState(() => `Guest-${participantId.slice(0, 6)}`)
 
   const [users, setUsers] = useState([])
+  const [roomLinkCopied, setRoomLinkCopied] = useState(false)
+  const [roomLinkCopyError, setRoomLinkCopyError] = useState('')
   const [connectionStatus, setConnectionStatus] = useState('connecting')
   const [connectionError, setConnectionError] = useState('')
   const [languageKey, setLanguageKey] = useState('javascript')
@@ -111,25 +165,24 @@ function App() {
     provider.connect()
   }
 
-  const handleJoin = (e) => {
-    e.preventDefault()
-    const name = e.target.username.value.trim()
-    if (!name) return
-
-    setUsername(name)
-    const url = new URL(window.location.href)
-    url.searchParams.delete('username')
-    url.searchParams.delete('email')
-    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+  const handleCopyRoomLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href)
+      setRoomLinkCopyError('')
+      setRoomLinkCopied(true)
+      window.setTimeout(() => setRoomLinkCopied(false), 2_000)
+    } catch {
+      setRoomLinkCopyError('Clipboard unavailable. Copy the URL from your address bar.')
+    }
   }
 
   useEffect(() => {
-    if (!username || !editorReady || !editorRef.current) return
+    if (!editorReady || !editorRef.current) return
 
     let reconnectFailed = false
     const provider = new SocketIOProvider(
       BACKEND_URL,
-      'monaco',
+      roomId,
       ydoc,
       { autoConnect: false },
       {
@@ -262,7 +315,7 @@ function App() {
       window.removeEventListener("beforeunload", handleBeforeUnload)
     }
 
-  }, [editorReady, participantId, username, ydoc, yText])
+  }, [editorReady, participantId, roomId, username, ydoc, yText])
 
   useEffect(() => {
     return () => {
@@ -270,28 +323,20 @@ function App() {
     }
   }, [ydoc])
 
-  if (!username) {
-    return (
-      <main className="h-screen w-full bg-gray-900 flex items-center justify-center p-4">
-        <form onSubmit={handleJoin} className='flex flex-col items-center gap-4 w-full max-w-sm'>
-          <input
-            type="text"
-            placeholder='enter your name'
-            className='w-full p-2 rounded-lg bg-gray-800 text-white'
-            name='username'
-          />
-          <button className='w-full p-2 rounded-lg bg-amber-50 text-gray-950 font-bold'>
-            join
-          </button>
-        </form>
-      </main>
-    )
-  }
-
   return (
     <main className="workspace-layout h-screen w-full bg-gray-900 flex gap-4 p-4">
       <aside className='users-sidebar h-full w-1/4 bg-amber-50 rounded-lg p-2'>
-      <h2 className="text-2xl font-bold mb-4">Users</h2>
+      <div className="editor-sidebar-heading">
+        <button className="editor-home-link" type="button" onClick={onHome} aria-label="Return to homepage">CRDT</button>
+        <h2 className="text-2xl font-bold mb-4">Users</h2>
+      </div>
+      <div className="room-share-card">
+        <span>Room link</span>
+        <button type="button" onClick={handleCopyRoomLink}>
+          {roomLinkCopied ? 'Link copied' : 'Copy invite link'}
+        </button>
+        {roomLinkCopyError && <small role="status">{roomLinkCopyError}</small>}
+      </div>
       <section
         className={`collaboration-status-card status-${connectionStatus}`}
         role="status"
