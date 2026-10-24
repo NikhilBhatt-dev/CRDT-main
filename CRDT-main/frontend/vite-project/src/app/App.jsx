@@ -36,6 +36,52 @@ function getParticipantId() {
   return participantId
 }
 
+function createGuestProfile() {
+  const participantId = getParticipantId()
+  let displayName = `Guest ${participantId.slice(0, 4).toUpperCase()}`
+  try {
+    const storedName = window.localStorage.getItem('crdt-guest-name')
+    if (storedName?.trim() && storedName.trim().length <= 24 && !hasControlCharacters(storedName)) {
+      displayName = storedName.trim()
+    }
+  } catch {
+    return { participantId, displayName }
+  }
+  return { participantId, displayName }
+}
+
+function getParticipantColor(participantId) {
+  let hash = 2166136261
+  for (const character of participantId) {
+    hash ^= character.charCodeAt(0)
+    hash = Math.imul(hash, 16777619)
+  }
+  const value = hash >>> 0
+  const hue = value % 360
+  const saturation = 67 + ((value >>> 9) % 21)
+  const lightness = 60 + ((value >>> 17) % 19)
+  return `hsl(${hue} ${saturation}% ${lightness}%)`
+}
+
+function getAwarenessColor(color, participantId) {
+  return /^hsl\(\d{1,3} (?:6[7-9]|7\d|8[0-7])% (?:6\d|7\d)%\)$/.test(color)
+    ? color
+    : getParticipantColor(participantId)
+}
+
+function hasControlCharacters(value) {
+  return Array.from(value).some(character => {
+    const code = character.charCodeAt(0)
+    return code <= 31 || code === 127
+  })
+}
+
+function getInitials(name) {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length > 1) return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
+  return (parts[0] || 'G').slice(0, 2).toUpperCase()
+}
+
 const ROOM_PATH_PATTERN = /^\/room\/([0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\/?$/i
 
 function getRoomIdFromPath(pathname) {
@@ -95,11 +141,21 @@ function EditorRoom({ roomId, onHome }) {
   const bindingRef = useRef(null)
   const executionLockRef = useRef(false)
   const hasConnectedRef = useRef(false)
-  const participantId = useMemo(getParticipantId, [])
+  const profile = useMemo(createGuestProfile, [])
+  const participantId = profile.participantId
+  const participantColor = useMemo(() => getParticipantColor(participantId), [participantId])
+  const displayNameRef = useRef(profile.displayName)
+  const cursorStylesRef = useRef(null)
+  const toastTimerRef = useRef(null)
   const [editorReady, setEditorReady] = useState(false)
-  const [username] = useState(() => `Guest-${participantId.slice(0, 6)}`)
+  const [displayName, setDisplayName] = useState(profile.displayName)
 
   const [users, setUsers] = useState([])
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [renameValue, setRenameValue] = useState(profile.displayName)
+  const [renameError, setRenameError] = useState('')
+  const [renameToast, setRenameToast] = useState('')
   const [roomLinkCopied, setRoomLinkCopied] = useState(false)
   const [roomLinkCopyError, setRoomLinkCopyError] = useState('')
   const [connectionStatus, setConnectionStatus] = useState('connecting')
@@ -113,6 +169,30 @@ function EditorRoom({ roomId, onHome }) {
 
   const ydoc = useMemo(() => new Y.Doc(), [])
   const yText = useMemo(() => ydoc.getText("monaco"), [ydoc])
+  const onlineUsers = connectionStatus === 'connected' ? users : []
+  const currentUser = { participantId, username: displayName, color: participantColor }
+
+  useEffect(() => {
+    displayNameRef.current = displayName
+    if (connectionStatus === 'connected') {
+      providerRef.current?.awareness.setLocalStateField('user', {
+        participantId,
+        username: displayName,
+        color: participantColor,
+      })
+    }
+  }, [connectionStatus, displayName, participantColor, participantId])
+
+  useEffect(() => {
+    const syncStoredName = event => {
+      if (event.key !== 'crdt-guest-name' || !event.newValue) return
+      const nextName = event.newValue.trim()
+      if (!nextName || nextName.length > 24 || hasControlCharacters(nextName)) return
+      setDisplayName(nextName)
+    }
+    window.addEventListener('storage', syncStoredName)
+    return () => window.removeEventListener('storage', syncStoredName)
+  }, [])
 
   useEffect(() => {
     const url = new URL(window.location.href)
@@ -165,6 +245,65 @@ function EditorRoom({ roomId, onHome }) {
     provider.connect()
   }
 
+  const openRename = () => {
+    setRenameValue(displayName)
+    setRenameError('')
+    setProfileMenuOpen(false)
+    setRenameOpen(true)
+  }
+
+  const saveDisplayName = (event) => {
+    event?.preventDefault()
+    const nextName = renameValue.trim()
+    if (!nextName) {
+      setRenameError('Enter a display name.')
+      return
+    }
+    if (nextName.length > 24) {
+      setRenameError('Display names must be 24 characters or fewer.')
+      return
+    }
+    if (hasControlCharacters(nextName)) {
+      setRenameError('Display names cannot contain control characters.')
+      return
+    }
+
+    let savedToStorage = true
+    try {
+      window.localStorage.setItem('crdt-guest-name', nextName)
+    } catch {
+      savedToStorage = false
+    }
+    setDisplayName(nextName)
+    setRenameOpen(false)
+    setRenameError('')
+    setRenameToast(savedToStorage ? `You are now ${nextName}` : `You are now ${nextName}. Name saved for this session only.`)
+    window.clearTimeout(toastTimerRef.current)
+    toastTimerRef.current = window.setTimeout(() => setRenameToast(''), 2600)
+  }
+
+  const cancelRename = () => {
+    setRenameOpen(false)
+    setRenameError('')
+    setRenameValue(displayName)
+  }
+
+  useEffect(() => {
+    if (!renameOpen) return undefined
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setRenameOpen(false)
+        setRenameError('')
+        setRenameValue(displayName)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [renameOpen, displayName])
+
+  useEffect(() => () => window.clearTimeout(toastTimerRef.current), [])
+
   const handleCopyRoomLink = async () => {
     try {
       await navigator.clipboard.writeText(window.location.href)
@@ -195,6 +334,10 @@ function EditorRoom({ roomId, onHome }) {
     const editor = editorRef.current
 
     providerRef.current = provider
+    const cursorStyles = document.createElement('style')
+    cursorStyles.dataset.roomCursorStyles = roomId
+    document.head.appendChild(cursorStyles)
+    cursorStylesRef.current = cursorStyles
     bindingRef.current = new MonacoBinding(
       yText,
       editor.getModel(),
@@ -204,21 +347,71 @@ function EditorRoom({ roomId, onHome }) {
 
     const updateUsers = () => {
       const states = Array.from(provider.awareness.getStates().values())
-
-      setUsers(
-        Array.from(
-          new Map(
-            states
-              .map(state => state.user)
-              .filter(user => user?.participantId && user?.username)
-              .map(user => [user.participantId, user])
-          ).values()
-        )
+      const collaborators = Array.from(
+        new Map(
+          states
+            .map(state => state.user)
+            .filter(user => (
+              typeof user?.participantId === 'string' &&
+              user.participantId &&
+              typeof user.username === 'string' &&
+              user.username
+            ))
+            .map(user => [user.participantId, {
+              participantId: user.participantId,
+              username: user.username,
+              color: getAwarenessColor(user.color, user.participantId),
+            }])
+        ).values()
       )
+      setUsers(collaborators)
+
+      cursorStyles.textContent = Array.from(provider.awareness.getStates().entries())
+        .filter(([, state]) => (
+          typeof state.user?.participantId === 'string' &&
+          state.user.participantId &&
+          typeof state.user.username === 'string' &&
+          state.user.username
+        ))
+        .map(([clientId, state]) => {
+          const user = state.user
+          const color = getAwarenessColor(user.color, user.participantId)
+          const safeName = JSON.stringify(String(user.username).slice(0, 24))
+          return `
+            .monaco-editor .yRemoteSelection-${clientId} { background-color: color-mix(in srgb, ${color} 24%, transparent); }
+            .monaco-editor .yRemoteSelectionHead-${clientId} {
+              position: relative;
+              border-left: 2px solid ${color};
+              border-right: 2px solid ${color};
+              box-sizing: border-box;
+            }
+            .monaco-editor .yRemoteSelectionHead-${clientId}::after {
+              position: absolute;
+              z-index: 20;
+              top: -1.4rem;
+              left: -2px;
+              max-width: 12rem;
+              overflow: hidden;
+              border-radius: 0.25rem;
+              background: ${color};
+              padding: 0.12rem 0.35rem;
+              color: #07111f;
+              content: ${safeName};
+              font: 600 0.68rem/1.2 system-ui, sans-serif;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+              pointer-events: none;
+            }`
+        })
+        .join('\n')
     }
 
     const syncAwareness = () => {
-      provider.awareness.setLocalStateField('user', { participantId, username })
+      provider.awareness.setLocalStateField('user', {
+        participantId,
+        username: displayNameRef.current,
+        color: participantColor,
+      })
       updateUsers()
     }
     const handleStatus = ({ status }) => {
@@ -303,6 +496,8 @@ function EditorRoom({ roomId, onHome }) {
       provider.socket.io.off('reconnect_error', handleReconnectError)
       provider.socket.io.off('reconnect_failed', handleReconnectFailed)
       provider.awareness.setLocalStateField('user', null)
+      cursorStyles.remove()
+      cursorStylesRef.current = null
       bindingRef.current?.destroy()
       bindingRef.current = null
       provider.disconnect()
@@ -315,7 +510,7 @@ function EditorRoom({ roomId, onHome }) {
       window.removeEventListener("beforeunload", handleBeforeUnload)
     }
 
-  }, [editorReady, participantId, roomId, username, ydoc, yText])
+  }, [editorReady, participantColor, participantId, roomId, ydoc, yText])
 
   useEffect(() => {
     return () => {
@@ -386,17 +581,75 @@ function EditorRoom({ roomId, onHome }) {
         )}
       </section>
 
-      <ul className='p-4'>
-        {users.map((u, i) => (
-          <li key={i} className="bg-gray-800 text-white  p-2 rounded mb-2">
-            {u.username}
-          </li>
-        ))}
-        </ul>
+      <section className="sidebar-collaborators" aria-label="Online collaborators">
+        <div className="sidebar-collaborators-heading">
+          <h3>In this room</h3>
+          <span>{onlineUsers.length} online</span>
+        </div>
+        {onlineUsers.length ? (
+          <ul className="collaborator-list">
+            {onlineUsers.map(user => (
+              <li className="collaborator-list-item" key={user.participantId}>
+                <span className="collaborator-avatar" style={{ '--collaborator-color': user.color }} aria-hidden="true">
+                  {getInitials(user.username)}
+                </span>
+                <span className="collaborator-name">{user.username}</span>
+                {user.participantId === participantId && <span className="you-label">you</span>}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="collaborator-empty">Collaborators appear when connected.</p>
+        )}
+      </section>
       </aside>
 
       <section className='compiler-section w-3/4 bg-neutral-800 rounded-lg overflow-hidden'>
         <div className="compiler-toolbar">
+          <div className="toolbar-presence" aria-label="Room presence">
+            <div className="toolbar-online" aria-label={`${onlineUsers.length} collaborators online`}>
+              <div className="toolbar-avatars">
+                {onlineUsers.slice(0, 4).map(user => (
+                  <span
+                    className="toolbar-avatar"
+                    key={user.participantId}
+                    style={{ '--collaborator-color': user.color }}
+                    title={user.username}
+                    aria-label={user.username}
+                  >
+                    {getInitials(user.username)}
+                  </span>
+                ))}
+                {onlineUsers.length > 4 && <span className="toolbar-avatar toolbar-avatar-overflow">+{onlineUsers.length - 4}</span>}
+              </div>
+              <span className="toolbar-online-count">
+                <span className={`toolbar-online-dot ${connectionStatus === 'connected' ? 'is-online' : ''}`} aria-hidden="true" />
+                {onlineUsers.length} online
+              </span>
+            </div>
+            <div className="profile-menu-wrap" onKeyDown={event => {
+              if (event.key === 'Escape') setProfileMenuOpen(false)
+            }}>
+              <button
+                className="profile-menu-trigger"
+                type="button"
+                aria-haspopup="menu"
+                aria-expanded={profileMenuOpen}
+                onClick={() => setProfileMenuOpen(open => !open)}
+              >
+                <span className="toolbar-avatar current-user-avatar" style={{ '--collaborator-color': currentUser.color }} aria-hidden="true">
+                  {getInitials(currentUser.username)}
+                </span>
+                <span className="current-user-name">{currentUser.username}</span>
+                <span className="profile-menu-chevron" aria-hidden="true">▾</span>
+              </button>
+              {profileMenuOpen && (
+                <div className="profile-menu" role="menu" aria-label="Guest profile">
+                  <button type="button" role="menuitem" onClick={openRename}>Rename</button>
+                </div>
+              )}
+            </div>
+          </div>
           <label className="language-control">
             Language
             <select
@@ -474,6 +727,41 @@ function EditorRoom({ roomId, onHome }) {
           </section>
         </div>
       </section>
+      {renameOpen && (
+        <div className="rename-modal-backdrop">
+          <section className="rename-modal" role="dialog" aria-modal="true" aria-labelledby="rename-title">
+            <p className="rename-modal-eyebrow">GUEST PROFILE</p>
+            <h2 id="rename-title">Choose a display name</h2>
+            <p className="rename-modal-description">This name is visible to people in this room. Your guest ID stays private.</p>
+            <form onSubmit={saveDisplayName}>
+              <label htmlFor="guest-display-name">Display name</label>
+              <input
+                id="guest-display-name"
+                autoFocus
+                autoComplete="off"
+                maxLength={24}
+                value={renameValue}
+                onChange={event => {
+                  setRenameValue(event.target.value)
+                  setRenameError('')
+                }}
+                aria-invalid={Boolean(renameError)}
+                aria-describedby={renameError ? 'rename-error' : 'rename-hint'}
+              />
+              {renameError ? (
+                <p className="rename-error" id="rename-error" role="alert">{renameError}</p>
+              ) : (
+                <p className="rename-hint" id="rename-hint">{renameValue.trim().length}/24 characters · Enter to save · Escape to cancel</p>
+              )}
+              <div className="rename-modal-actions">
+                <button className="rename-cancel-button" type="button" onClick={cancelRename}>Cancel</button>
+                <button className="rename-save-button" type="submit">Save</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+      {renameToast && <div className="rename-toast" role="status" aria-live="polite">{renameToast}</div>}
     </main>
   )
 }
