@@ -11,6 +11,30 @@ const languages = [
   { key: 'python', label: 'Python', monacoLanguage: 'python' },
   { key: 'javascript', label: 'JavaScript (Node.js)', monacoLanguage: 'javascript' },
 ]
+const BACKEND_URL = (
+  import.meta.env.VITE_BACKEND_URL ||
+  (import.meta.env.DEV
+    ? `${window.location.protocol}//${window.location.hostname}:3000`
+    : 'https://crdt-main.onrender.com')
+).replace(/\/+$/, '')
+
+function getParticipantId() {
+  const storageKey = 'crdt-participant-id'
+  try {
+    const existingId = window.localStorage.getItem(storageKey)
+    if (existingId) return existingId
+  } catch {
+    return window.crypto.randomUUID()
+  }
+
+  const participantId = window.crypto.randomUUID()
+  try {
+    window.localStorage.setItem(storageKey, participantId)
+  } catch {
+    return participantId
+  }
+  return participantId
+}
 
 function App() {
 
@@ -18,12 +42,9 @@ function App() {
   const providerRef = useRef(null)
   const bindingRef = useRef(null)
   const executionLockRef = useRef(false)
+  const participantId = useMemo(getParticipantId, [])
   const [editorReady, setEditorReady] = useState(false)
-
-  const [username, setUsername] = useState(() => {
-    const urlParams = new URLSearchParams(window.location.search)
-    return urlParams.get("username") || ""
-  })
+  const [username, setUsername] = useState('')
 
   const [users, setUsers] = useState([])
   const [connectionStatus, setConnectionStatus] = useState('connecting')
@@ -32,17 +53,19 @@ function App() {
   const [execution, setExecution] = useState(null)
   const [executionError, setExecutionError] = useState('')
   const [isRunning, setIsRunning] = useState(false)
-  const isLocalhost =
-    window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1'
-  const socketServerUrl =
-    isLocalhost && window.location.port !== '3000'
-      ? `${window.location.protocol}//${window.location.hostname}:3000`
-      : window.location.origin
   const selectedLanguage = languages.find(language => language.key === languageKey)
 
   const ydoc = useMemo(() => new Y.Doc(), [])
   const yText = useMemo(() => ydoc.getText("monaco"), [ydoc])
+
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    if (url.searchParams.has('username') || url.searchParams.has('email')) {
+      url.searchParams.delete('username')
+      url.searchParams.delete('email')
+      window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`)
+    }
+  }, [])
 
   const handleMount = (editor) => {
     editorRef.current = editor
@@ -57,7 +80,7 @@ function App() {
     setExecution(null)
     setExecutionError('')
     try {
-      const response = await fetch(`${socketServerUrl}/api/execute`, {
+      const response = await fetch(`${BACKEND_URL}/api/execute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -83,17 +106,18 @@ function App() {
     if (!name) return
 
     setUsername(name)
-    window.history.pushState({}, "", "?username=" + name)
+    window.history.replaceState({}, "", window.location.pathname)
   }
 
   useEffect(() => {
     if (!username || !editorReady || !editorRef.current) return
 
     const provider = new SocketIOProvider(
-      socketServerUrl,
+      BACKEND_URL,
       'monaco',
       ydoc,
-      { autoConnect: true }
+      { autoConnect: true },
+      { transports: ['websocket'] }
     )
     const editor = editorRef.current
 
@@ -113,15 +137,15 @@ function App() {
           new Map(
             states
               .map(state => state.user)
-              .filter(user => user?.username)
-              .map(user => [user.username, user])
+              .filter(user => user?.participantId && user?.username)
+              .map(user => [user.participantId, user])
           ).values()
         )
       )
     }
 
     const syncAwareness = () => {
-      provider.awareness.setLocalStateField('user', { username })
+      provider.awareness.setLocalStateField('user', { participantId, username })
       updateUsers()
     }
     const handleStatus = ({ status }) => {
@@ -163,7 +187,7 @@ function App() {
       window.removeEventListener("beforeunload", handleBeforeUnload)
     }
 
-  }, [editorReady, socketServerUrl, username, ydoc, yText])
+  }, [editorReady, participantId, username, ydoc, yText])
 
   useEffect(() => {
     return () => {

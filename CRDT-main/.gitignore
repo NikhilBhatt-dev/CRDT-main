@@ -7,6 +7,7 @@
 .env
 .env.*
 !backend/.env.example
+!frontend/vite-project/.env.example
 
 node_module
 

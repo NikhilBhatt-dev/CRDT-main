@@ -27,6 +27,12 @@ const indexHtmlPath = fs.existsSync(path.join(publicPath, "index.html"))
 const PORT = process.env.PORT || 3000
 const ONLINECOMPILER_API_URL =
     process.env.ONLINECOMPILER_API_URL || "https://api.onlinecompiler.io/api/run-code-sync/"
+const frontendOrigins = new Set(
+    (process.env.FRONTEND_ORIGIN || "https://crdt-main.vercel.app")
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+)
 const MAX_SOURCE_BYTES = 100_000
 const MAX_STDIN_BYTES = 100_000
 const EXECUTION_TIMEOUT_MS = 35_000
@@ -45,6 +51,12 @@ class OnlineCompilerError extends Error {
         super(message)
         this.status = status
     }
+}
+
+function isAllowedOrigin(origin) {
+    if (!origin || frontendOrigins.has(origin)) return true
+    return process.env.NODE_ENV !== "production" &&
+        /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(origin)
 }
 
 function getOnlineCompilerUrl() {
@@ -222,7 +234,10 @@ async function executeCode(req, res) {
 app.use(express.static("public"))
 app.use("/api", (req, res, next) => {
     const origin = req.get("Origin")
-    if (origin && /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(origin)) {
+    if (!isAllowedOrigin(origin)) {
+        return res.status(403).json({ error: "This origin is not allowed to access the API." })
+    }
+    if (origin) {
         res.set("Access-Control-Allow-Origin", origin)
         res.vary("Origin")
         res.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
@@ -237,9 +252,16 @@ const httpServer = createServer(app)
 
 const io =  new Server(httpServer, {
     cors: {
-        origin: '*',
-        methods: ['GET', 'POST']
-    }
+        origin: (origin, callback) => {
+            if (isAllowedOrigin(origin)) return callback(null, true)
+            callback(new Error("This origin is not allowed to connect."))
+        },
+        methods: ['GET', 'POST'],
+    },
+    transports: ['polling', 'websocket'],
+    allowRequest: (request, callback) => {
+        callback(null, isAllowedOrigin(request.headers.origin))
+    },
 })
 
 
