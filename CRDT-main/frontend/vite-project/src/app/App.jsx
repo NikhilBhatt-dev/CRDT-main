@@ -90,6 +90,7 @@ function getRoomIdFromPath(pathname) {
 
 function App() {
   const [roomId, setRoomId] = useState(() => getRoomIdFromPath(window.location.pathname))
+  const [roomLinkFeedback, setRoomLinkFeedback] = useState(null)
   const [invalidRoomPath, setInvalidRoomPath] = useState(() => (
     window.location.pathname !== '/' && !getRoomIdFromPath(window.location.pathname)
   ))
@@ -104,9 +105,9 @@ function App() {
     return () => window.removeEventListener('popstate', updateRoute)
   }, [])
 
-  const startRoom = () => {
-    const newRoomId = window.crypto.randomUUID()
+  const startRoom = (newRoomId = window.crypto.randomUUID(), linkFeedback = null) => {
     window.history.pushState({}, '', `/room/${newRoomId}`)
+    setRoomLinkFeedback(linkFeedback)
     setInvalidRoomPath(false)
     setRoomId(newRoomId)
   }
@@ -131,10 +132,10 @@ function App() {
   }
 
   if (!roomId) return <HomePage onStart={startRoom} />
-  return <EditorRoom key={roomId} roomId={roomId} onHome={goHome} />
+  return <EditorRoom key={roomId} roomId={roomId} onHome={goHome} initialRoomLinkFeedback={roomLinkFeedback} />
 }
 
-function EditorRoom({ roomId, onHome }) {
+function EditorRoom({ roomId, onHome, initialRoomLinkFeedback }) {
 
   const editorRef = useRef(null)
   const providerRef = useRef(null)
@@ -156,8 +157,10 @@ function EditorRoom({ roomId, onHome }) {
   const [renameValue, setRenameValue] = useState(profile.displayName)
   const [renameError, setRenameError] = useState('')
   const [renameToast, setRenameToast] = useState('')
-  const [roomLinkCopied, setRoomLinkCopied] = useState(false)
-  const [roomLinkCopyError, setRoomLinkCopyError] = useState('')
+  const [roomLinkCopied, setRoomLinkCopied] = useState(initialRoomLinkFeedback === 'copied')
+  const [roomLinkCopyError, setRoomLinkCopyError] = useState(
+    initialRoomLinkFeedback === 'error' ? 'Could not copy the room link. You can try Copy invite link.' : ''
+  )
   const [connectionStatus, setConnectionStatus] = useState('connecting')
   const [connectionError, setConnectionError] = useState('')
   const [languageKey, setLanguageKey] = useState('javascript')
