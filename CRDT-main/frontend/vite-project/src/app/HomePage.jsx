@@ -145,7 +145,7 @@ function HomePage({ onStart }) {
                 <div className="preview-code-lines" aria-hidden="true">
                   <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span><span>11</span>
                 </div>
-                <pre aria-label="Illustrative JavaScript code preview"><code><span className="code-keyword">const</span> room = <span className="code-string">"open-web"</span>;{'\n\n'}<span className="code-keyword">function</span> buildTogether(team) {'{'}{'\n'}  <span className="code-comment">// Ideas move better in the same room.</span>{'\n'}  <span className="code-keyword">return</span> team.<span className="code-method">map</span>(person =&gt; {'{'}{'\n'}    <span className="code-keyword">return</span> <span className="code-string">`${'{'}person{'}'} is here`</span>;{'\n'}  {'}'});{'\n'}{'}'}{'\n\n'}<span className="code-keyword">const</span> team = [<span className="code-string">"Alex"</span>, <span className="code-string">"Sam"</span>, <span className="code-string">"You"</span>];{'\n'}console.<span className="code-method">log</span>(buildTogether(team));</code></pre>
+                <pre aria-label="Illustrative JavaScript code preview"><code><span className="code-keyword">const</span> room = <span className="code-string">"open-web"</span>;{'\n\n'}<span className="code-keyword">function</span> buildTogether(team) {'{'}{'\n'}  <span className="code-comment">// Ideas move better in the same room.</span>{'\n'}  <span className="code-keyword">return</span> team.<span className="code-method">map</span>(person =&gt; {'{'}{'\n'}    <span className="code-keyword">return</span> <span className="code-string">`${'{'}person{'}'} is here`</span>;{'\n'}  {'}'});{'\n'}{'}'}{'\n\n'}<span className="code-keyword">const</span> team = [<span className="code-string">"Alex"</span>, <span className="code-string">"Boid"</span>, <span className="code-string">"You"</span>];{'\n'}console.<span className="code-method">log</span>(buildTogether(team));</code></pre>
                 <span className="preview-cursor cursor-alex">Alex</span>
                 <span className="preview-cursor cursor-sam">Boid</span>
                 <span className="preview-selection" aria-hidden="true" />
@@ -153,7 +153,7 @@ function HomePage({ onStart }) {
               </div>
               <aside className="preview-side-panel" aria-label="Illustrative guest presence panel">
                 <p className="preview-side-heading">LIVE PRESENCE <i>/</i> YOURSELF</p>
-                <p className="preview-side-copy">Alex and Sam are shown as collaborators. In a connected room, collaborators appear here with their chosen names.</p>
+                <p className="preview-side-copy">Alex and Boid are shown as collaborators. In a connected room, collaborators appear here with their chosen names.</p>
                 {previewEditing ? (
                   <form className="preview-rename-form" onSubmit={savePreviewName}>
                     <label htmlFor="preview-guest-name">LOCAL GUEST NAME</label>
