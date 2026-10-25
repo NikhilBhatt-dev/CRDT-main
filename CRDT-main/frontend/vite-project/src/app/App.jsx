@@ -146,7 +146,6 @@ function EditorRoom({ roomId, onHome, initialRoomLinkFeedback }) {
   const participantId = profile.participantId
   const participantColor = useMemo(() => getParticipantColor(participantId), [participantId])
   const displayNameRef = useRef(profile.displayName)
-  const cursorStylesRef = useRef(null)
   const toastTimerRef = useRef(null)
   const [editorReady, setEditorReady] = useState(false)
   const [displayName, setDisplayName] = useState(profile.displayName)
@@ -340,13 +339,89 @@ function EditorRoom({ roomId, onHome, initialRoomLinkFeedback }) {
     const cursorStyles = document.createElement('style')
     cursorStyles.dataset.roomCursorStyles = roomId
     document.head.appendChild(cursorStyles)
-    cursorStylesRef.current = cursorStyles
+    const cursorOverlay = document.createElement('div')
+    cursorOverlay.className = 'remote-cursor-overlay'
+    cursorOverlay.setAttribute('aria-hidden', 'true')
+    editor.getDomNode().appendChild(cursorOverlay)
+    const cursorLabels = new Map()
+    let cursorUpdateFrame = 0
     bindingRef.current = new MonacoBinding(
       yText,
       editor.getModel(),
       new Set([editor]),
       provider.awareness
     )
+
+    const updateRemoteCursorLabels = () => {
+      const model = editor.getModel()
+      if (!model) return
+
+      const activeClients = new Set()
+      const seenParticipants = new Set([participantId])
+      const editorSize = editor.getLayoutInfo()
+      provider.awareness.getStates().forEach((state, clientId) => {
+        if (clientId === ydoc.clientID || !state.selection?.head) return
+
+        const user = state.user
+        const remoteParticipantId = typeof user?.participantId === 'string' && user.participantId
+          ? user.participantId
+          : `remote-${clientId}`
+        if (seenParticipants.has(remoteParticipantId)) return
+
+        const absolutePosition = Y.createAbsolutePositionFromRelativePosition(state.selection.head, ydoc)
+        if (!absolutePosition || absolutePosition.type !== yText) return
+        const position = model.getPositionAt(absolutePosition.index)
+        const visiblePosition = editor.getScrolledVisiblePosition(position)
+        if (!visiblePosition) return
+
+        const username = typeof user?.username === 'string' && user.username.trim()
+          ? user.username.trim().slice(0, 24)
+          : 'Guest'
+        const color = getAwarenessColor(user?.color, remoteParticipantId)
+        let label = cursorLabels.get(clientId)
+        if (!label) {
+          label = document.createElement('span')
+          label.className = 'remote-cursor-label'
+          cursorOverlay.appendChild(label)
+          cursorLabels.set(clientId, label)
+        }
+
+        label.textContent = username
+        label.style.setProperty('--remote-cursor-color', color)
+        label.style.visibility = 'visible'
+        label.style.top = '0'
+        label.style.left = '0'
+        const labelWidth = label.offsetWidth
+        const left = Math.max(0, Math.min(
+          visiblePosition.left + 3,
+          editorSize.width - labelWidth
+        ))
+        const aboveTop = visiblePosition.top - label.offsetHeight - 2
+        const top = Math.max(0, Math.min(
+          aboveTop >= 0 ? aboveTop : visiblePosition.top + visiblePosition.height + 2,
+          editorSize.height - label.offsetHeight
+        ))
+        label.style.left = `${left}px`
+        label.style.top = `${top}px`
+
+        activeClients.add(clientId)
+        seenParticipants.add(remoteParticipantId)
+      })
+
+      cursorLabels.forEach((label, clientId) => {
+        if (activeClients.has(clientId)) return
+        label.remove()
+        cursorLabels.delete(clientId)
+      })
+    }
+
+    const scheduleRemoteCursorLabels = () => {
+      if (cursorUpdateFrame) return
+      cursorUpdateFrame = window.requestAnimationFrame(() => {
+        cursorUpdateFrame = 0
+        updateRemoteCursorLabels()
+      })
+    }
 
     const updateUsers = () => {
       const states = Array.from(provider.awareness.getStates().values())
@@ -370,16 +445,13 @@ function EditorRoom({ roomId, onHome, initialRoomLinkFeedback }) {
       setUsers(collaborators)
 
       cursorStyles.textContent = Array.from(provider.awareness.getStates().entries())
-        .filter(([, state]) => (
-          typeof state.user?.participantId === 'string' &&
-          state.user.participantId &&
-          typeof state.user.username === 'string' &&
-          state.user.username
-        ))
+        .filter(([clientId, state]) => clientId !== ydoc.clientID && state.selection?.head != null)
         .map(([clientId, state]) => {
           const user = state.user
-          const color = getAwarenessColor(user.color, user.participantId)
-          const safeName = JSON.stringify(String(user.username).slice(0, 24))
+          const remoteParticipantId = typeof user?.participantId === 'string' && user.participantId
+            ? user.participantId
+            : `remote-${clientId}`
+          const color = getAwarenessColor(user?.color, remoteParticipantId)
           return `
             .monaco-editor .yRemoteSelection-${clientId} { background-color: color-mix(in srgb, ${color} 24%, transparent); }
             .monaco-editor .yRemoteSelectionHead-${clientId} {
@@ -387,26 +459,10 @@ function EditorRoom({ roomId, onHome, initialRoomLinkFeedback }) {
               border-left: 2px solid ${color};
               border-right: 2px solid ${color};
               box-sizing: border-box;
-            }
-            .monaco-editor .yRemoteSelectionHead-${clientId}::after {
-              position: absolute;
-              z-index: 20;
-              top: -1.4rem;
-              left: -2px;
-              max-width: 12rem;
-              overflow: hidden;
-              border-radius: 0.25rem;
-              background: ${color};
-              padding: 0.12rem 0.35rem;
-              color: #07111f;
-              content: ${safeName};
-              font: 600 0.68rem/1.2 system-ui, sans-serif;
-              text-overflow: ellipsis;
-              white-space: nowrap;
-              pointer-events: none;
             }`
         })
         .join('\n')
+      updateRemoteCursorLabels()
     }
 
     const syncAwareness = () => {
@@ -467,6 +523,9 @@ function EditorRoom({ roomId, onHome, initialRoomLinkFeedback }) {
     }
 
     provider.awareness.on("change", updateUsers)
+    ydoc.on('update', scheduleRemoteCursorLabels)
+    const scrollListener = editor.onDidScrollChange(scheduleRemoteCursorLabels)
+    const layoutListener = editor.onDidLayoutChange(scheduleRemoteCursorLabels)
     provider.on("sync", syncAwareness)
     provider.on("status", handleStatus)
     provider.on("connection-error", handleConnectionError)
@@ -488,6 +547,12 @@ function EditorRoom({ roomId, onHome, initialRoomLinkFeedback }) {
 
     return () => {
       provider.awareness.off("change", updateUsers)
+      ydoc.off('update', scheduleRemoteCursorLabels)
+      scrollListener.dispose()
+      layoutListener.dispose()
+      if (cursorUpdateFrame) window.cancelAnimationFrame(cursorUpdateFrame)
+      cursorLabels.clear()
+      cursorOverlay.remove()
       provider.off("sync", syncAwareness)
       provider.off("status", handleStatus)
       provider.off("connection-error", handleConnectionError)
@@ -500,7 +565,6 @@ function EditorRoom({ roomId, onHome, initialRoomLinkFeedback }) {
       provider.socket.io.off('reconnect_failed', handleReconnectFailed)
       provider.awareness.setLocalStateField('user', null)
       cursorStyles.remove()
-      cursorStylesRef.current = null
       bindingRef.current?.destroy()
       bindingRef.current = null
       provider.disconnect()

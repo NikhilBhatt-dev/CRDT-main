@@ -200,6 +200,36 @@
   border: 1px solid #23334c;
 }
 
+.remote-cursor-overlay {
+  position: absolute;
+  z-index: 60;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.remote-cursor-label {
+  position: absolute;
+  display: block;
+  max-width: min(11rem, calc(100% - 0.5rem));
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--remote-cursor-color) 65%, #172033);
+  border-left: 2px solid var(--remote-cursor-color);
+  background: #111827;
+  padding: 0.12rem 0.34rem;
+  color: #f8fafc;
+  font: 600 0.68rem/1.25 Inter, ui-sans-serif, system-ui, sans-serif;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 35%);
+  pointer-events: none;
+  user-select: none;
+}
+
+.monaco-editor .yRemoteSelection {
+  opacity: 1;
+}
+
 .users-sidebar .editor-home-link {
   color: #93c5fd;
 }

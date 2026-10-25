@@ -121,7 +121,7 @@ function HomePage({ onStart }) {
         <div className="preview-wrap">
           <div className="preview-label-row">
             <p className="home-eyebrow">THE SHARED ROOM <i>/</i> PREVIEW</p>
-            <span className="preview-concept-label">FIG. 01 — LIVE-ROOM CONCEPT</span>
+            <span className="preview-concept-label"> LIVE-ROOM CONCEPT</span>
           </div>
           <section className="preview-window" aria-label="Static homepage preview of the collaborative editor">
             <div className="preview-roombar">
@@ -147,7 +147,7 @@ function HomePage({ onStart }) {
                 </div>
                 <pre aria-label="Illustrative JavaScript code preview"><code><span className="code-keyword">const</span> room = <span className="code-string">"open-web"</span>;{'\n\n'}<span className="code-keyword">function</span> buildTogether(team) {'{'}{'\n'}  <span className="code-comment">// Ideas move better in the same room.</span>{'\n'}  <span className="code-keyword">return</span> team.<span className="code-method">map</span>(person =&gt; {'{'}{'\n'}    <span className="code-keyword">return</span> <span className="code-string">`${'{'}person{'}'} is here`</span>;{'\n'}  {'}'});{'\n'}{'}'}{'\n\n'}<span className="code-keyword">const</span> team = [<span className="code-string">"Alex"</span>, <span className="code-string">"Sam"</span>, <span className="code-string">"You"</span>];{'\n'}console.<span className="code-method">log</span>(buildTogether(team));</code></pre>
                 <span className="preview-cursor cursor-alex">Alex</span>
-                <span className="preview-cursor cursor-sam">Sam</span>
+                <span className="preview-cursor cursor-sam">Boid</span>
                 <span className="preview-selection" aria-hidden="true" />
                 <span className="preview-cursor cursor-you">You</span>
               </div>
@@ -176,14 +176,14 @@ function HomePage({ onStart }) {
                   </div>
                 )}
                 <p className="preview-side-heading preview-terminal-label">TERMINAL <i>/</i> EXAMPLE OUTPUT</p>
-                <pre className="preview-output"><code>[ '{'\n'}  'Alex', 'Sam', 'You are here' {'\n'}]</code></pre>
+                <pre className="preview-output"><code>[ '{'\n'}  'Alex', 'Boid', 'You are here' {'\n'}]</code></pre>
                 <p className="preview-side-copy preview-caveat">Illustrative output. Actual code execution uses the product’s integrated service.</p>
                 {previewMessage && <p className="preview-message" role="status">{previewMessage}</p>}
               </aside>
             </div>
             <div className="preview-footer">
-              <span>LOCAL PREVIEW / JAVASCRIPT</span>
-              <button type="button" onClick={copyPreviewCode}>{codeCopied ? 'Copied' : 'Copy code'}</button>
+              <span>JAVASCRIPT</span>
+              <button type="button">Copy Code</button>
             </div>
           </section>
           <p className="preview-disclaimer">Homepage concept preview: edits and guest renaming here are local. Live collaboration, room links, and execution require a connected product room.</p>
